@@ -122,7 +122,7 @@ export class Commands {
 
   async registerCommandsForGuild(guild: Guild, ...disabledCommands: string[]) {
     await this.loadCommands(...disabledCommands);
-    await guild.commands.set(commands.map(command => command.data));
+    await guild.commands.set([...new Map(commands.map(command => [command.data.name, command])).values()].map(command => command.data));
   }
 
   async registerCommands(): Promise<any[]> {
