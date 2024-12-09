@@ -12,6 +12,18 @@ const cooldowns = new Map<string, number>();
 export default (async function run(message) {
   const author = message.author;
   if (author.bot) return;
+  if (message.content == `<@${message.client.user.id}>`) {
+    return message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Hey! I'm Sokora")
+          .setDescription("A multipurpose Discord bot that lets you manage your servers easily. :sparkles:")
+          .setFooter({ text: "Type /sokora to get started!" })
+          .setColor(genColor(200))
+          .setThumbnail(message.client.user.avatarURL())
+      ]
+    })
+  }
   const guild = message.guild!;
 
   // Easter egg handler
