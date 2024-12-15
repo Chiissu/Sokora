@@ -56,18 +56,18 @@ export async function errorCheck(
       "You can't execute this command.",
       `You're missing the **${permissionAction}** permission.`
     );
+  const name = user.displayName;
 
   if (unbanError)
     if (!user)
       return await errorEmbed(
         interaction,
-        "You can't unban this user.",
+        `You can't unban **${name}**.`,
         "The user was never banned."
       );
 
   if (!allErrors) return;
   const target = members.get(user.id)!;
-  const name = user.displayName;
   const highestModPos = member.roles.highest.position;
   const highestTargetPos = target.roles.highest.position;
 
@@ -82,14 +82,16 @@ export async function errorCheck(
     return await errorEmbed(
       interaction,
       `You can't ${action.toLowerCase()} ${name}.`,
-      "The member has a higher (or the same) role position than Sokora."
+      `The member has a higher (or the same) role position than Sokora.`
     );
 
   if (highestModPos <= highestTargetPos)
     return await errorEmbed(
       interaction,
       `You can't ${action.toLowerCase()} ${name}.`,
-      `The member has ${highestModPos == highestTargetPos ? "the same" : "a higher"} role position ${highestModPos == highestTargetPos ? "as" : "than"} you.`
+      `The member has ${
+        highestModPos == highestTargetPos ? "the same" : "a higher"
+      } role position ${highestModPos == highestTargetPos ? "as" : "than"} you.`
     );
 
   if (ownerError) {
@@ -124,12 +126,14 @@ export async function modEmbed(
   const guild = interaction.guild!;
   const name = user.displayName;
   const generalValues = [`**Moderator**: ${interaction.user.displayName}`];
-  let author = `• ${previousID ? "Edited a" : ""} ${previousID ? dbAction?.toLowerCase() : action} ${previousID ? "on" : ""} ${name}`;
+  let author = `• ${previousID ? "Edited a" : ""} ${
+    previousID ? dbAction?.toLowerCase() : action
+  } ${previousID ? "on" : ""} ${name}`;
   reason ? generalValues.push(`**Reason**: ${reason}`) : generalValues.push("*No reason provided*");
   if (duration) generalValues.push(`**Duration**: ${ms(ms(duration), { long: true })}`);
   if (previousID) {
     let previousCase = getModeration(guild.id, user.id, `${previousID}`);
-    if (!previousCase.length && previousCase[0].user != user.id && previousCase[0].type != dbAction)
+    if (!previousCase.length || previousCase[0].user != user.id || previousCase[0].type != dbAction)
       return await errorEmbed(
         interaction,
         `You can't edit this ${dbAction?.toLowerCase()}.`,
@@ -144,9 +148,9 @@ export async function modEmbed(
     author = author.concat(`  •  #${previousID}`);
   }
 
-  if (!previousID || !dbAction) return;
+  if (!dbAction) return;
   try {
-    const id = addModeration(
+    const id: number = addModeration(
       guild.id,
       user.id,
       dbAction,

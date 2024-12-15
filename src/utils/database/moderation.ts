@@ -29,8 +29,12 @@ const listModQuery = database.query(
   "SELECT * FROM moderation WHERE guild = $1 AND moderator = $2;"
 );
 const getIdQuery = database.query("SELECT * FROM moderation WHERE guild = $1 AND id = $2;");
-const getLastIdQuery = database.query("SELECT * FROM moderation WHERE guild = $1 ORDER BY id DESC LIMIT 1;");
-const editQuery = database.query("UPDATE moderation SET reason = ?3, expiresAt = ?4 WHERE guild = ?1 AND id = ?2;");
+const getLastIdQuery = database.query(
+  "SELECT * FROM moderation WHERE guild = $1 ORDER BY id DESC LIMIT 1;"
+);
+const editQuery = database.query(
+  "UPDATE moderation SET reason = ?3, expiresAt = ?4 WHERE guild = ?1 AND id = ?2;"
+);
 const removeQuery = database.query("DELETE FROM moderation WHERE guild = $1 AND id = $2");
 
 export function addModeration(
@@ -41,10 +45,10 @@ export function addModeration(
   reason = "",
   expiresAt?: number | null
 ) {
+  type possibleIdReturn = { id: string }[] | number;
   // ISTG we need a DB init file, have an autoincrement on the id and everything is fixed
-  let id: any = getLastIdQuery.all(guildID);
-  if (!id.length) return;
-  id = parseInt(id[0].id) + 1;
+  let id: possibleIdReturn = getLastIdQuery.all(guildID) as possibleIdReturn;
+  id = Array.isArray(id) && id.length > 0 ? parseInt(id[0].id) + 1 : 0;
   addQuery.run(guildID, userID, type, moderator, reason, id, Date.now(), expiresAt ?? null);
   return id;
 }
@@ -70,7 +74,12 @@ export function listModeratorLog(guildID: number | string, moderator: number | s
   return listModQuery.all(guildID, moderator) as TypeOfDefinition<typeof definition>[];
 }
 
-export function editModeration(guildID: number | string, id: string, reason: string, expiresAt?: number | null) {
+export function editModeration(
+  guildID: number | string,
+  id: string,
+  reason: string,
+  expiresAt?: number | null
+) {
   editQuery.run(guildID, id, reason, expiresAt ?? null);
 }
 
