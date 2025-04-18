@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# lil function to handle termination
+cleanup() {
+  exit 0
+}
+
+trap cleanup SIGINT SIGTERM
+
+# epic launcher code will go over here once im actually in my ide
+
+cleanup
