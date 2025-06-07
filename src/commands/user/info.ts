@@ -1,21 +1,22 @@
+import { getLevel } from "database/leveling";
+import { getSetting } from "database/settings";
 import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonInteraction,
   ButtonStyle,
   EmbedBuilder,
-  SlashCommandBuilder,
+  SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { genColor, genImageColor } from "../utils/colorGen";
-import { getLevel } from "../utils/database/leveling";
-import { getSetting } from "../utils/database/settings";
-import { errorEmbed } from "../utils/embeds/errorEmbed";
-import { pluralOrNot } from "../utils/pluralOrNot";
-import { mention } from "../utils/mention";
+import { errorEmbed } from "embeds/errorEmbed";
+import { genColor, genImageColor } from "utils/colorGen";
+import { mention } from "utils/mention";
+import { pfpCheck } from "utils/pfpCheck";
+import { pluralOrNot } from "utils/pluralOrNot";
 
-export const data = new SlashCommandBuilder()
-  .setName("user")
+export const data = new SlashCommandSubcommandBuilder()
+  .setName("info")
   .setDescription("Shows your (or another user's) info.")
   .addUserOption(user => user.setName("user").setDescription("Select the user."));
 
@@ -29,9 +30,9 @@ export async function run(interaction: ChatInputCommandInteraction) {
     (await genImageColor(undefined, avatar)) ??
     genColor(200);
 
-  let embed = new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setAuthor({
-      name: `${avatar ? "•  " : ""}${target?.nickname ?? user.displayName}`,
+      name: `${pfpCheck(avatar)}${target?.nickname ?? user.displayName}`,
       iconURL: avatar,
     })
     .setFields({
@@ -45,13 +46,12 @@ export async function run(interaction: ChatInputCommandInteraction) {
       ].join("\n"),
     })
     .setFooter({ text: `User ID: ${user.id}` })
-    .setThumbnail(avatar)
     .setColor(embedColor);
 
   await interaction.reply({ embeds: [embed] });
 
   if (!target) return;
-  let serverInfo = [`Joined on **<t:${Math.round(target.joinedAt?.valueOf()! / 1000)}:D>**`];
+  const serverInfo = [`Joined on **<t:${Math.round(target.joinedAt!.valueOf()! / 1000)}:D>**`];
   const guildRoles = guild.roles.cache.filter(role => target.roles.cache.has(role.id))!;
   const memberRoles = [...guildRoles].sort((role1, role2) => role2[1].position - role1[1].position);
   memberRoles.pop();
@@ -65,10 +65,11 @@ export async function run(interaction: ChatInputCommandInteraction) {
       `**${guildRoles.filter(role => target.roles.cache.has(role.id)).size! - 1}** ${pluralOrNot(
         "role",
         memberRoles.length,
-      )} • ${memberRoles
-        .slice(0, 3)
-        .map(role => mention(role[1].id, "ROLE"))
-        .join(", ")}${rolesLength > 3 ? ` and **${rolesLength - 3}** more` : ""}`,
+      )} • ${(
+        await Promise.all(
+          memberRoles.slice(0, 3).map(async role => await mention(role[1].id, "ROLE")),
+        )
+      ).join("  •  ")}${rolesLength > 3 ? ` and **${rolesLength - 3}** more` : ""}`,
     );
 
   embed.addFields({
@@ -76,7 +77,7 @@ export async function run(interaction: ChatInputCommandInteraction) {
     value: serverInfo.join("\n"),
   });
 
-  const enabled = getSetting(`${guild.id}`, "leveling", "enabled");
+  const enabled = await getSetting(`${guild.id}`, "leveling", "enabled");
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("general")
@@ -90,38 +91,43 @@ export async function run(interaction: ChatInputCommandInteraction) {
       .setStyle(ButtonStyle.Primary),
   );
   row.components[0].setDisabled(true);
+  // todo: prevent unknown error when deleting
   const reply = await interaction.editReply({
     embeds: [embed],
     components: !user.bot ? (enabled ? [row] : []) : [],
   });
 
   if (!enabled && user.bot) return;
-  const difficulty = getSetting(guild.id, "leveling", "difficulty") as number;
+  const difficulty = (await getSetting(guild.id, "leveling", "difficulty")) as number;
   const [level, xp] = getLevel(guild.id, target.id)!;
   const nextLevelXp = Math.floor(
     100 * difficulty * (level + 1) ** 2 - 80 * difficulty * level ** 2,
   )?.toLocaleString("en-US");
+  const levelAvatar = target.displayAvatarURL();
 
   const collector = reply.createMessageComponentCollector({ time: 30000 });
   collector.on("collect", async (i: ButtonInteraction) => {
     if (i.message.id != (await reply.fetch()).id)
-      return await errorEmbed(
-        i,
-        "For some reason, this click would've caused the bot to error. Thankfully, this message right here prevents that.",
-      );
+      return await errorEmbed({
+        interaction: i,
+        title:
+          "For some reason, this click would've caused the bot to error. Thankfully, this message right here prevents that.",
+      });
 
     if (i.user.id != interaction.user.id)
-      return await errorEmbed(i, "You aren't the person who executed this command.");
+      return await errorEmbed({
+        interaction: i,
+        title: "You aren't the person who executed this command.",
+      });
 
     collector.resetTimer({ time: 30000 });
-    i.customId == "general"
-      ? row.components[0].setDisabled(true)
-      : row.components[1].setDisabled(true);
+    if (i.customId == "general") row.components[0].setDisabled(true);
+    else row.components[1].setDisabled(true);
 
     const levelEmbed = new EmbedBuilder()
       .setAuthor({
-        name: `•  ${target.nickname ?? user.displayName}`,
-        iconURL: target.displayAvatarURL(),
+        name: `${pfpCheck(levelAvatar)}${target.nickname ?? user.displayName}`,
+        iconURL: levelAvatar,
       })
       .setFields({
         name: `⚡ • Level ${level}`,
@@ -131,7 +137,6 @@ export async function run(interaction: ChatInputCommandInteraction) {
         ].join("\n"),
       })
       .setFooter({ text: `User ID: ${target.id}` })
-      .setThumbnail(target.displayAvatarURL())
       .setColor(embedColor);
 
     switch (i.customId) {

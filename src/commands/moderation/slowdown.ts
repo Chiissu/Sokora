@@ -3,10 +3,11 @@ import {
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
+import { modActionEmbed } from "embeds/modActionEmbed";
+import { errorCheck } from "embeds/modEmbed";
 import ms from "ms";
-import { modActionEmbed } from "../../utils/embeds/modActionEmbed";
-import { errorCheck } from "../../utils/embeds/modEmbed";
-import { mention } from "../../utils/mention";
+import { mention } from "utils/mention";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("slowdown")
@@ -29,6 +30,7 @@ export const data = new SlashCommandSubcommandBuilder()
         ChannelType.PublicThread,
         ChannelType.PrivateThread,
         ChannelType.GuildVoice,
+        ChannelType.GuildStageVoice,
       ),
   );
 
@@ -54,23 +56,32 @@ export async function run(interaction: ChatInputCommandInteraction) {
   if (!ms(time)) title = `Removed the slowdown from ${channelOption ?? `${channel.name}`}.`;
 
   if (
-    channel.type == ChannelType.GuildText &&
-    ChannelType.PublicThread &&
-    ChannelType.PrivateThread &&
-    ChannelType.GuildVoice
+    !(
+      channel.type == ChannelType.GuildText &&
+      ChannelType.PublicThread &&
+      ChannelType.PrivateThread &&
+      ChannelType.GuildVoice &&
+      ChannelType.GuildStageVoice
+    )
   )
-    await channel.setRateLimitPerUser(ms(time) / 1000, interaction.options.getString("reason")!);
+    return await errorEmbed({
+      interaction,
+      title: "You have provided a channel that can't be slowed down.",
+    });
 
-  await modActionEmbed(
-    {
-      title,
-      body: [
-        `**Moderator**: ${interaction.user.displayName}`,
-        reason ? `**Reason**: ${reason}` : "*No reason provided*",
-        `**Channel**: ${channelOption ?? mention(channel.id, "CHANNEL")}`,
-      ],
-    },
-    guild,
-    interaction,
-  );
+  await Promise.all([
+    channel.setRateLimitPerUser(ms(time) / 1000, interaction.options.getString("reason")!),
+    modActionEmbed(
+      {
+        title,
+        body: [
+          `**Moderator**: ${interaction.user.username}`,
+          reason ? `**Reason**: ${reason}` : "*No reason provided*",
+          `**Channel**: ${channelOption ?? (await mention(channel.id, "CHANNEL"))}`,
+        ],
+      },
+      guild,
+      interaction,
+    ),
+  ]);
 }

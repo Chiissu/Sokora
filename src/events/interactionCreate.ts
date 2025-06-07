@@ -1,14 +1,17 @@
-import { commands, subCommands } from "../handlers/commands";
-import { check } from "../utils/database/blocklist";
-import { errorEmbed } from "../utils/embeds/errorEmbed";
-import { noErrorsPlease } from "../utils/noErrorsPlease";
-import type { Event } from "../utils/types";
+import { check } from "database/blocklist";
+import { SlashCommandSubcommandBuilder } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
+import { commands, subCommands } from "handlers/commands";
+import { noErrorsPlease } from "utils/noErrorsPlease";
+import type { Event } from "utils/types";
 
 export default (async function run(interaction) {
   if (!interaction.isChatInputCommand() && !interaction.isAutocomplete()) return;
   let command;
-  const subCommand = subCommands.filter(
-    subCommand => subCommand.data.name == interaction.options.getSubcommand(false),
+  const subCommand = subCommands.filter(subCommand =>
+    subCommand.data instanceof SlashCommandSubcommandBuilder
+      ? subCommand.data.name == interaction.options.getSubcommand(false)
+      : subCommand.data.name == interaction.options.getSubcommandGroup(false),
   )[0];
 
   if (!subCommand)
@@ -17,12 +20,12 @@ export default (async function run(interaction) {
 
   if (!command) return;
   if (interaction.isChatInputCommand()) {
-    if (!check(interaction.member?.user.id!))
-      return await errorEmbed(
+    if (!interaction.member || !check(interaction.member.user.id!))
+      return await errorEmbed({
         interaction,
-        "The bot has experienced an internal error.",
-        "Please try again later.",
-      );
+        title: "The bot has experienced an internal error.",
+        reason: "Please try again later.",
+      });
 
     await noErrorsPlease(interaction);
     command.run(interaction);

@@ -6,11 +6,7 @@ export type FieldData =
   | "CHANNEL"
   | "USER"
   | "ROLE"
-  | "COMMAND"
-  | "LIST"
-  | "SETTING"
-  | "SETTING_CATEGORY";
-
+  | "LOG";
 export type TableDefinition = {
   name: string;
   definition: Record<string, FieldData>;
@@ -24,12 +20,19 @@ export type SqlType<T extends FieldData> = {
   CHANNEL: string;
   USER: string;
   ROLE: string;
-  COMMAND: string;
-  LIST: any[];
-  SETTING: any[];
-  SETTING_CATEGORY: any[];
+  LOG: string[];
 }[T];
 
 export type TypeOfDefinition<T extends TableDefinition> = {
   [K in keyof T["definition"]]: SqlType<T["definition"][K]>;
+};
+
+export type SingleSettingDefinition = {
+  type: FieldData;
+  desc: string;
+  val?: any;
+  settings?: Record<
+    string,
+    SingleSettingDefinition & { settings?: Record<string, SingleSettingDefinition> }
+  >;
 };

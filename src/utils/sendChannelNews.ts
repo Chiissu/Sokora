@@ -1,3 +1,5 @@
+import { get, updateNews } from "database/news";
+import { getSetting } from "database/settings";
 import {
   EmbedBuilder,
   type ChatInputCommandInteraction,
@@ -6,9 +8,8 @@ import {
   type TextChannel,
 } from "discord.js";
 import { genColor } from "./colorGen";
-import { get, updateNews } from "./database/news";
-import { getSetting } from "./database/settings";
 import { mention } from "./mention";
+import { pfpCheck } from "./pfpCheck";
 
 /**
  * Sends news to a channel.
@@ -27,12 +28,12 @@ export async function sendChannelNews(
   body?: string,
 ): Promise<void> {
   const news = get(guild.id, id)!;
-  const role = getSetting(guild.id, "news", "role_id") as string;
+  const role = (await getSetting(guild.id, "news", "role_id")) as string;
   let roleToSend: Role | undefined;
   if (role) roleToSend = guild.roles.cache.get(role);
-
+  const avatar = news.authorPFP;
   const embed = new EmbedBuilder()
-    .setAuthor({ name: `•  ${news.author}`, iconURL: news.authorPFP })
+    .setAuthor({ name: `${pfpCheck(avatar)}${news.author}`, iconURL: avatar })
     .setTitle(title ?? news.title)
     .setDescription(body ?? news.body)
     .setTimestamp(parseInt(news.updatedAt.toString()) ?? null)
@@ -40,7 +41,7 @@ export async function sendChannelNews(
     .setColor(genColor(200));
 
   const channel = guild.channels.cache.get(
-    (getSetting(guild.id, "news", "channel_id") as string) ?? interaction.channel?.id,
+    ((await getSetting(guild.id, "news", "channel_id")) as string) ?? interaction.channel?.id,
   ) as TextChannel;
   if (!channel) return;
   if (!channel.permissionsFor(guild.client.user)?.has("ViewChannel")) return;
@@ -48,7 +49,7 @@ export async function sendChannelNews(
   return await channel
     .send({
       embeds: [embed],
-      content: roleToSend ? mention(roleToSend.id, "ROLE") : undefined,
+      content: roleToSend ? await mention(roleToSend.id, "ROLE") : undefined,
     })
     .then(message => updateNews(guild.id, id, undefined, undefined, message.id));
 }

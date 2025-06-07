@@ -3,10 +3,10 @@ import {
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { modActionEmbed } from "../../utils/embeds/modActionEmbed";
-import { mention } from "../../utils/mention";
-import { errorCheck } from "../../utils/embeds/modEmbed";
+import { errorEmbed } from "embeds/errorEmbed";
+import { modActionEmbed } from "embeds/modActionEmbed";
+import { errorCheck } from "embeds/modEmbed";
+import { mention } from "utils/mention";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("lock")
@@ -20,6 +20,7 @@ export const data = new SlashCommandSubcommandBuilder()
         ChannelType.PublicThread,
         ChannelType.PrivateThread,
         ChannelType.GuildVoice,
+        ChannelType.GuildStageVoice,
       ),
   );
 
@@ -38,18 +39,27 @@ export async function run(interaction: ChatInputCommandInteraction) {
     return;
 
   if (!channel.permissionsFor(guild.id)?.has("SendMessages"))
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "You can't execute this command.",
-      "The channel is already locked.",
-    );
+      title: "You can't execute this command.",
+      reason: "The channel is already locked.",
+    });
 
   if (
-    channel.type == ChannelType.GuildText &&
-    ChannelType.PublicThread &&
-    ChannelType.PrivateThread &&
-    ChannelType.GuildVoice
+    !(
+      channel.type == ChannelType.GuildText &&
+      ChannelType.PublicThread &&
+      ChannelType.PrivateThread &&
+      ChannelType.GuildVoice &&
+      ChannelType.GuildStageVoice
+    )
   )
+    return await errorEmbed({
+      interaction,
+      title: "You have provided a channel that can't be locked.",
+    });
+
+  await Promise.all([
     channel.permissionOverwrites
       .create(guild.id, {
         SendMessages: false,
@@ -57,17 +67,24 @@ export async function run(interaction: ChatInputCommandInteraction) {
         CreatePublicThreads: false,
         CreatePrivateThreads: false,
       })
-      .catch(error => console.error(error));
-
-  await modActionEmbed(
-    {
-      title: "Locked a channel.",
-      body: [
-        `**Moderator**: ${interaction.user.displayName}`,
-        `**Channel**: ${channelOption ?? mention(channel.id, "CHANNEL")}`,
-      ],
-    },
-    guild,
-    interaction,
-  );
+      .catch(
+        async error =>
+          await errorEmbed({
+            interaction,
+            error,
+            forward: true,
+          }),
+      ),
+    modActionEmbed(
+      {
+        title: "Locked a channel.",
+        body: [
+          `**Moderator**: ${interaction.user.username}`,
+          `**Channel**: ${channelOption ?? (await mention(channel.id, "CHANNEL"))}`,
+        ],
+      },
+      guild,
+      interaction,
+    ),
+  ]);
 }

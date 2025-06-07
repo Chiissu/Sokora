@@ -1,7 +1,10 @@
+// todo: merge this into modEmbed
 import { ChatInputCommandInteraction, EmbedBuilder, Guild } from "discord.js";
 import { genColor } from "../colorGen";
 import { logChannel } from "../logChannel";
+import { pfpCheck } from "../pfpCheck";
 import { reply } from "../reply";
+import { errorEmbed } from "./errorEmbed";
 
 type Content = {
   title: string;
@@ -25,16 +28,17 @@ export async function modActionEmbed(
   i: ChatInputCommandInteraction,
 ): Promise<EmbedBuilder> {
   const { title, iconURL, body, footer } = content;
-
   const embed = new EmbedBuilder()
-    .setAuthor({ name: title, iconURL: iconURL })
+    .setAuthor({ name: `${pfpCheck(iconURL)}${title}`, iconURL: iconURL })
     .setDescription(Array.isArray(body) ? body.join("\n") : body)
     .setColor(genColor(100));
 
   if (footer) embed.setFooter({ text: footer });
-
-  await logChannel(guild, { embeds: [embed] }).catch(e => console.error(e));
-  await reply(i, { embeds: [embed] }).catch(e => console.error(e));
+  try {
+    await Promise.all([logChannel(guild, { embeds: [embed] }), reply(i, { embeds: [embed] })]);
+  } catch (error) {
+    await errorEmbed({ client: guild.client, error, log: true, forward: true });
+  }
 
   return embed;
 }

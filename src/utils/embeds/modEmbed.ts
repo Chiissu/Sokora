@@ -1,14 +1,16 @@
+import { addModeration, editModeration, getModeration, type modType } from "database/moderation";
 import {
   EmbedBuilder,
-  type PermissionResolvable,
   type ChatInputCommandInteraction,
-  type User,
   type GuildBasedChannel,
+  type PermissionResolvable,
+  type User,
 } from "discord.js";
 import ms from "ms";
+import { reply } from "utils/reply";
 import { genColor } from "../colorGen";
-import { getModeration, addModeration, editModeration, type modType } from "../database/moderation";
 import { logChannel } from "../logChannel";
+import { pfpCheck } from "../pfpCheck";
 import { errorEmbed } from "./errorEmbed";
 
 type Options = {
@@ -47,72 +49,39 @@ export async function errorCheck(
 
   if (botError)
     if (!client.permissions.has(permission))
-      return await errorEmbed(
+      return await errorEmbed({
         interaction,
-        "The bot can't execute this command.",
-        `The bot is missing the **${permissionAction}** permission. If you want to run this command, you might want to give the bot this permission.`,
-      );
+        title: "The bot can't execute this command.",
+        reason: `The bot is missing the **${permissionAction}** permission. If you want to run this command, you might want to give the bot this permission.`,
+      });
 
   if (channelError)
     if (!channel?.permissionsFor(client).has("ViewChannel"))
-      return await errorEmbed(
+      return await errorEmbed({
         interaction,
-        "The bot can't execute this command.",
-        `The bot is missing the **View Channel** permission. If you want to run this command, you might want to give the bot this permission from the channel settings.`,
-      );
+        title: "The bot can't execute this command.",
+        reason: `The bot is missing the **View Channel** permission. If you want to run this command, you might want to give the bot this permission from the channel settings.`,
+      });
 
   if (!member.permissions.has(permission))
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "You can't execute this command.",
-      `You're missing the **${permissionAction}** permission.`,
-    );
+      title: "You can't execute this command.",
+      reason: `You're missing the **${permissionAction}** permission.`,
+    });
 
   if (unbanError)
     if (!user)
-      return await errorEmbed(
+      return await errorEmbed({
         interaction,
-        "You can't unban this user.",
-        "The user was never banned.",
-      );
+        title: "You can't unban this user.",
+        reason: "This user isn't currently banned.",
+      });
 
   if (!allErrors || !user || !action) return;
   const target = members.get(user.id)!;
   const name = user.displayName;
   const highestModPos = member.roles.highest.position;
-  const highestTargetPos = target.roles.highest.position;
-
-  if (!target) return;
-  if (target == member)
-    return await errorEmbed(interaction, `You can't ${action.toLowerCase()} yourself.`);
-
-  if (target.id == interaction.client.user.id)
-    return await errorEmbed(interaction, `You can't ${action.toLowerCase()} Sokora.`);
-
-  if (!target.manageable)
-    return await errorEmbed(
-      interaction,
-      `You can't ${action.toLowerCase()} ${name}.`,
-      "The member has a higher (or the same) role position than Sokora.",
-    );
-
-  const same: boolean = highestModPos == highestTargetPos;
-
-  if (highestModPos <= highestTargetPos)
-    return await errorEmbed(
-      interaction,
-      `You can't ${action.toLowerCase()} ${name}.`,
-      `The member has ${same ? "the same" : "a higher"} role position ${same ? "as" : "than"} you.`,
-    );
-
-  if (ownerError) {
-    if (target.id == guild.ownerId)
-      return await errorEmbed(
-        interaction,
-        `You can't ${action.toLowerCase()} ${name}.`,
-        "The member owns the server.",
-      );
-  }
 
   if (outsideError)
     if (
@@ -121,11 +90,45 @@ export async function errorCheck(
         .then(() => true)
         .catch(() => false))
     )
-      return await errorEmbed(
+      return await errorEmbed({
         interaction,
-        `You can't ${action.toLowerCase()} ${name}.`,
-        "This user isn't in this server.",
-      );
+        title: `You can't ${action.toLowerCase()} ${name}.`,
+        reason: "This user isn't in this server.",
+      });
+
+  if (!target) return;
+  const highestTargetPos = target.roles.highest.position;
+
+  if (target == member)
+    return await errorEmbed({ interaction, title: `You can't ${action.toLowerCase()} yourself.` });
+
+  if (target.id == interaction.client.user.id)
+    return await errorEmbed({ interaction, title: `You can't ${action.toLowerCase()} Sokora.` });
+
+  if (!target.manageable)
+    return await errorEmbed({
+      interaction,
+      title: `You can't ${action.toLowerCase()} ${name}.`,
+      reason: "The member has a higher (or the same) role position than Sokora.",
+    });
+
+  const same: boolean = highestModPos == highestTargetPos;
+
+  if (highestModPos <= highestTargetPos)
+    return await errorEmbed({
+      interaction,
+      title: `You can't ${action.toLowerCase()} ${name}.`,
+      reason: `The member has ${same ? "the same" : "a higher"} role position ${same ? "as" : "than"} you.`,
+    });
+
+  if (ownerError) {
+    if (target.id == guild.ownerId)
+      return await errorEmbed({
+        interaction,
+        title: `You can't ${action.toLowerCase()} ${name}.`,
+        reason: "The member owns the server.",
+      });
+  }
 }
 
 export async function modEmbed(
@@ -138,71 +141,82 @@ export async function modEmbed(
   const guild = interaction.guild!;
   const name = user.displayName;
   const generalValues = [`**Moderator**: ${interaction.user.displayName}`];
-  let author = `•  ${previousID ? "Edited a " : ""}${previousID ? dbAction?.toLowerCase() : action}${previousID ? " on" : ""} ${name}`;
-  reason ? generalValues.push(`**Reason**: ${reason}`) : generalValues.push("*No reason provided*");
+  const avatar = user.displayAvatarURL();
+  let author = `${pfpCheck(avatar)}${previousID ? "Edited a " : ""}${previousID ? dbAction?.toLowerCase() : action}${previousID ? " on" : ""} ${name}`;
+  if (reason) generalValues.push(`**Reason**: ${reason}`);
+  else generalValues.push("*No reason provided*");
+
   if (duration) generalValues.push(`**Duration**: ${ms(ms(duration), { long: true })}`);
   if (previousID) {
-    let previousCase = getModeration(guild.id, user.id, `${previousID}`);
+    const previousCase = getModeration(guild.id, user.id, `${previousID}`);
     if (
       (!previousCase.length && previousCase[0].user != user.id) ||
       previousCase[0].type != dbAction
     )
-      return await errorEmbed(
+      return await errorEmbed({
         interaction,
-        `You can't edit this ${dbAction?.toLowerCase()}.`,
-        `The ${dbAction?.toLowerCase()} doesn't exist.`,
-      );
+        title: `You can't edit this ${dbAction?.toLowerCase()}.`,
+        reason: `The ${dbAction?.toLowerCase()} doesn't exist.`,
+      });
 
     try {
       editModeration(guild.id, `${previousID}`, reason ?? "", expiresAt ?? null);
     } catch (error) {
-      console.error(error);
+      return await errorEmbed({ interaction, error, log: true, forward: true });
     }
     author = author.concat(`  •  #${previousID}`);
   } else if (!dbAction) return;
 
   try {
+    const moderator = guild.members.cache.get(interaction.user.id);
+    if (!moderator)
+      return await errorEmbed({
+        interaction,
+        title: `Failed to ${action.toLowerCase()}.`,
+        reason: "Cannot find moderator.",
+      });
+
     const id = addModeration(
       guild.id,
       user.id,
       dbAction,
-      guild.members.cache.get(interaction.user.id)?.id!,
+      moderator.id,
       reason ?? undefined,
       expiresAt ?? undefined,
     );
     author = author.concat(`  •  #${id}`);
   } catch (error) {
-    console.error(error);
+    return await errorEmbed({ interaction, error, log: true, forward: true });
   }
 
   const embed = new EmbedBuilder()
-    .setAuthor({ name: author, iconURL: user.displayAvatarURL() })
+    .setAuthor({ name: author, iconURL: avatar })
     .setDescription(generalValues.join("\n"))
     .setFooter({ text: `User ID: ${user.id}` })
     .setColor(genColor(100));
 
-  await logChannel(guild, { embeds: [embed] });
-  if (interaction.replied) await interaction.followUp({ embeds: [embed] });
-  else await interaction.reply({ embeds: [embed] });
+  await Promise.all([
+    logChannel(guild, { embeds: [embed] }),
+    reply(interaction, { embeds: [embed] }),
+  ]);
 
   if (!dm) return;
   const dmChannel = await user.createDM().catch(() => null);
   if (!dmChannel || !guild.members.cache.get(user.id) || user.bot) return;
   try {
-    await dmChannel
-      .send({
-        embeds: [
-          embed
-            .setAuthor({
-              name: `•  You got ${action.toLowerCase()}.`,
-              iconURL: user.displayAvatarURL(),
-            })
-            .setDescription(generalValues.slice(+!showModerator, generalValues.length).join("\n"))
-            .setColor(genColor(0)),
-        ],
-      })
-      .catch(() => null);
-  } catch (e) {
-    return console.error(e);
+    const serverAvatar = guild.icon ? guild.iconURL()! : undefined;
+    await dmChannel.send({
+      embeds: [
+        embed
+          .setAuthor({
+            name: `${pfpCheck(serverAvatar)}You got ${action.toLowerCase()} from ${guild.name}`,
+            iconURL: serverAvatar,
+          })
+          .setDescription(generalValues.slice(+!showModerator, generalValues.length).join("\n"))
+          .setColor(genColor(0)),
+      ],
+    });
+  } catch (error) {
+    return await errorEmbed({ interaction, error, log: true, forward: true });
   }
 }

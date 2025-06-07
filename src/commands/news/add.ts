@@ -1,3 +1,4 @@
+import { addNews, listAllQuery } from "database/news";
 import {
   ActionRowBuilder,
   EmbedBuilder,
@@ -7,11 +8,10 @@ import {
   TextInputStyle,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { genColor } from "../../utils/colorGen";
-import { addNews, listAllQuery } from "../../utils/database/news";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { sendChannelNews } from "../../utils/sendChannelNews";
-import { replaceVariables } from "../../utils/replace";
+import { errorEmbed } from "embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
+import { replaceVariables } from "utils/replace";
+import { sendChannelNews } from "utils/sendChannelNews";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("add")
@@ -20,11 +20,11 @@ export const data = new SlashCommandSubcommandBuilder()
 export async function run(interaction: ChatInputCommandInteraction) {
   const guild = interaction.guild!;
   if (!guild.members.cache.get(interaction.user.id)?.permissions.has("ManageGuild"))
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "You can't execute this command.",
-      "You need the **Manage Server** permission.",
-    );
+      title: "You can't execute this command.",
+      reason: "You need the **Manage Server** permission.",
+    });
 
   const firstActionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
     new TextInputBuilder()
@@ -51,7 +51,10 @@ export async function run(interaction: ChatInputCommandInteraction) {
     .setTitle("Write your news.")
     .addComponents(firstActionRow, secondActionRow);
 
-  await interaction.showModal(newsModal).catch(err => console.error(err));
+  await interaction
+    .showModal(newsModal)
+    .catch(async error => await errorEmbed({ interaction, error, forward: true }));
+
   interaction.client.once("interactionCreate", async i => {
     if (!i.isModalSubmit()) return;
 
@@ -70,7 +73,10 @@ export async function run(interaction: ChatInputCommandInteraction) {
     const id = (listAllQuery.all(guild.id).length + 1).toString();
     addNews(guild.id, title, body, i.user.displayName, i.user.avatarURL()!, null!, id);
 
-    await sendChannelNews(guild, id, interaction).catch(err => console.error(err));
+    await sendChannelNews(guild, id, interaction).catch(
+      async error => await errorEmbed({ interaction, error, forward: true }),
+    );
+
     await i.reply({
       embeds: [new EmbedBuilder().setTitle("News added.").setColor(genColor(100))],
       flags: "Ephemeral",

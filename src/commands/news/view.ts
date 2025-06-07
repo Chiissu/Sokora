@@ -1,3 +1,4 @@
+import { listAllNews } from "database/news";
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -7,9 +8,9 @@ import {
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { genColor } from "../../utils/colorGen";
-import { listAllNews } from "../../utils/database/news";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
+import { errorEmbed } from "embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
+import { pfpCheck } from "utils/pfpCheck";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("view")
@@ -20,23 +21,31 @@ export const data = new SlashCommandSubcommandBuilder()
 
 export async function run(interaction: ChatInputCommandInteraction) {
   let page = interaction.options.getNumber("page") ?? 1;
-  const news = listAllNews(interaction.guild?.id!);
+  if (!interaction.guild)
+    return await errorEmbed({
+      interaction,
+      title: "Error viewing news.",
+      reason: "This command can only be used in a server.",
+    });
+
+  const news = listAllNews(interaction.guild.id);
   const sortedNews = (Object.values(news) as any[])?.sort((a, b) => b.createdAt - a.createdAt);
 
   if (!news || !sortedNews || !sortedNews.length)
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "No news found.",
-      "Admins can add news with the **/news add** command.",
-    );
+      title: "No news found.",
+      reason: "Admins can add news with the **/news add** command.",
+    });
 
   if (page > sortedNews.length) page = sortedNews.length;
   if (page < 1) page = 1;
 
   function getEmbed() {
     const currentNews = sortedNews[page - 1];
+    const avatar = currentNews.authorPFP;
     return new EmbedBuilder()
-      .setAuthor({ name: `•  ${currentNews.author}`, iconURL: currentNews.authorPFP })
+      .setAuthor({ name: `${pfpCheck(avatar)}${currentNews.author}`, iconURL: avatar })
       .setTitle(currentNews.title)
       .setDescription(currentNews.body)
       .setImage(currentNews.imageURL || null)
@@ -56,6 +65,7 @@ export async function run(interaction: ChatInputCommandInteraction) {
       .setStyle(ButtonStyle.Primary),
   );
 
+  // todo: prevent unknown error when deleting
   const reply = await interaction.reply({
     embeds: [getEmbed()],
     components: page >= 1 ? [row] : [],
@@ -65,13 +75,17 @@ export async function run(interaction: ChatInputCommandInteraction) {
   const collector = reply.createMessageComponentCollector({ time: 30000 });
   collector.on("collect", async (i: ButtonInteraction) => {
     if (i.message.id != (await reply.fetch()).id)
-      return await errorEmbed(
-        i,
-        "For some reason, this click would've caused the bot to error. Thankfully, this message right here prevents that.",
-      );
+      return await errorEmbed({
+        interaction: i,
+        title:
+          "For some reason, this click would've caused the bot to error. Thankfully, this message right here prevents that.",
+      });
 
     if (i.user.id != interaction.user.id)
-      return await errorEmbed(i, "You aren't the person who executed this command.");
+      return await errorEmbed({
+        interaction: i,
+        title: "You aren't the person who executed this command.",
+      });
 
     collector.resetTimer({ time: 30000 });
     switch (i.customId) {

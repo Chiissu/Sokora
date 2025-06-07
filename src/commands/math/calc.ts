@@ -1,11 +1,11 @@
 import {
-  SlashCommandSubcommandBuilder,
   EmbedBuilder,
+  SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
 import * as math from "mathjs";
-import { genColor } from "../../utils/colorGen";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("calc")
@@ -23,19 +23,19 @@ export async function run(interaction: ChatInputCommandInteraction) {
   let result: number;
   try {
     result = math.evaluate(expr);
-    if (typeof result !== "number" || Number.isNaN(result) || !Number.isFinite(result)) {
+    if (typeof result != "number" || Number.isNaN(result) || !Number.isFinite(result))
       throw new Error("Invalid result");
-    }
   } catch {
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "Invalid expression",
-      "Please provide a valid mathematical expression. Examples: 'sin(pi/4)', '10*2+(6/3)', 'sqrt(25)'",
-    );
+      title: "Invalid expression.",
+      reason:
+        "Please provide a valid mathematical expression. Examples: 'sin(pi/4)', '10*2+(6/3)', 'sqrt(25)'",
+    });
   }
 
   const embed = new EmbedBuilder()
-    .setTitle("Calculation Result")
+    .setAuthor({ name: "Calculation result" })
     .setDescription(`\`${expr}\` = **${result}**`)
     .setColor(genColor(200));
 

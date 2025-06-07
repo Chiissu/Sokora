@@ -1,13 +1,14 @@
-import { createCanvas } from "canvas";
+import { ChartConfiguration } from "chart.js";
+import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import {
   AttachmentBuilder,
   EmbedBuilder,
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
 import * as math from "mathjs";
-import { genColor } from "../../utils/colorGen";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("graph")
@@ -34,72 +35,95 @@ export async function run(interaction: ChatInputCommandInteraction) {
     const compiled = math.compile(func);
     compiled.evaluate({ x: 0 });
 
-    const width = 800;
-    const height = 600;
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
-
-    // me when background?!
-    ctx.fillStyle = "#151515";
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-
-    const yAxis = height - ((0 - ymin) * height) / (ymax - ymin);
-    ctx.beginPath();
-    ctx.moveTo(0, yAxis);
-    ctx.lineTo(width, yAxis);
-    ctx.stroke();
-
-    const xAxis = ((0 - xmin) * width) / (xmax - xmin);
-    ctx.beginPath();
-    ctx.moveTo(xAxis, 0);
-    ctx.lineTo(xAxis, height);
-    ctx.stroke();
-
-    ctx.strokeStyle = "#ff0000";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
+    const chartJSNodeCanvas = new ChartJSNodeCanvas({
+      width: 800,
+      height: 600,
+      backgroundColour: "#151515",
+    });
 
     const points = 1000;
-    let first = true;
+    const data = [];
 
     for (let i = 0; i <= points; i++) {
       const x = xmin + (i * (xmax - xmin)) / points;
-
       try {
         const y = compiled.evaluate({ x });
-        if (typeof y != "number" || !isFinite(y)) continue;
-
-        const canvasX = ((x - xmin) * width) / (xmax - xmin);
-        const canvasY = height - ((y - ymin) * height) / (ymax - ymin);
-
-        if (first) {
-          ctx.moveTo(canvasX, canvasY);
-          first = false;
-        } else {
-          ctx.lineTo(canvasX, canvasY);
-        }
+        if (typeof y == "number" && isFinite(y)) data.push({ x, y });
       } catch {
         continue;
       }
     }
 
-    ctx.stroke();
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: "graph.png" });
+    const configuration: ChartConfiguration = {
+      type: "line",
+      data: {
+        datasets: [
+          {
+            label: `f(x) = ${func}`,
+            data: data,
+            borderColor: "#ff0000",
+            borderWidth: 4,
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            type: "linear" as const,
+            position: "center" as const,
+            min: xmin,
+            max: xmax,
+            grid: {
+              color: "#ffffff",
+              lineWidth: 2,
+            },
+            ticks: {
+              color: "#ffffff",
+            },
+          },
+          y: {
+            type: "linear" as const,
+            position: "center" as const,
+            min: ymin,
+            max: ymax,
+            grid: {
+              color: "#ffffff",
+              lineWidth: 2,
+            },
+            ticks: {
+              color: "#ffffff",
+            },
+          },
+        },
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
+      },
+    };
+
+    const attachment = new AttachmentBuilder(
+      await chartJSNodeCanvas.renderToBuffer(configuration),
+      { name: "graph.png" },
+    );
+
     const embed = new EmbedBuilder()
-      .setTitle("Function Graph")
+      .setAuthor({ name: "Function graph" })
       .setDescription(`\`f(x) = ${func}\``)
       .setImage("attachment://graph.png")
       .setColor(genColor(200));
 
     await interaction.reply({ embeds: [embed], files: [attachment] });
-  } catch (error) {
-    return await errorEmbed(
+  } catch {
+    return await errorEmbed({
       interaction,
-      "Invalid function",
-      "Please provide a valid mathematical function. Examples: 'x^2', 'sin(x)', '2*x + 1'.",
-    );
+      title: "Invalid function.",
+      reason: 'Please provide a valid mathematical function. Examples: "x^2", "sin(x)", "2*x + 1".',
+    });
   }
 }

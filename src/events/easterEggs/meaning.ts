@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import { randomize } from "../../utils/randomize";
+import { randomize } from "utils/randomize";
 
 export async function run(message: Message) {
   const msg = message.content.trim().toLowerCase();
@@ -22,7 +22,7 @@ export async function run(message: Message) {
   const ultraRareReply = "# 'SOKORA' MEANS 'EVERYTHING' IN JAPANESE!!!!!!1";
 
   const reply =
-    message.author.id === "823939421686071386" || chances < 0.3
+    message.author.id == "823939421686071386" || chances < 0.3
       ? ultraRareReply
       : chances >= 0.3 && chances < 3
         ? randomize(rareReplies)

@@ -1,5 +1,5 @@
 import { SlashCommandSubcommandBuilder, type ChatInputCommandInteraction } from "discord.js";
-import { errorCheck, modEmbed } from "../../utils/embeds/modEmbed";
+import { errorCheck, modEmbed } from "embeds/modEmbed";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("warn")

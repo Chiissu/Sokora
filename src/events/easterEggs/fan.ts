@@ -1,5 +1,5 @@
 import type { Message, TextChannel } from "discord.js";
-import { randomize } from "../../utils/randomize";
+import { randomize } from "utils/randomize";
 
 export async function run(message: Message) {
   if (message.content.trim().toLowerCase() != "i'm a big fan") return;

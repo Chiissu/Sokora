@@ -17,6 +17,16 @@
     "allowJs": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["bun-types"]
+    "types": ["bun-types"],
+    "paths": {
+      "database/*": ["./src/utils/database/*"],
+      "embeds/*": ["./src/utils/embeds/*"],
+      "audit/*": ["./src/events/auditLogs/*"],
+      "events/*": ["./src/events/*"],
+      "handlers/*": ["./src/handlers/*"],
+      "utils/*": ["./src/utils/*"],
+      "src/*": ["./src/*"],
+      "package": ["./package.json"]
+    }
   }
 }

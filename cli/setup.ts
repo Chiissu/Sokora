@@ -22,9 +22,7 @@ const readHiddenInput = async (prompt: string): Promise<string> => {
       }
     });
 
-    rl.question("", input => {
-      resolve(input);
-    });
+    rl.question("", input => resolve(input));
   });
 };
 
@@ -35,7 +33,7 @@ const replaceTokenInEnv = (token: string) => {
     fs.writeFileSync(".env", updatedContent, "utf-8");
     console.log("You're good to go, happy coding!");
   } catch (error) {
-    console.error("Error updating .env file:", error);
+    console.error(`Error updating .env file: ${error}`);
   }
 };
 

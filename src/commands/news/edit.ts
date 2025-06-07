@@ -1,3 +1,5 @@
+import { get, updateNews } from "database/news";
+import { getSetting } from "database/settings";
 import {
   ActionRowBuilder,
   EmbedBuilder,
@@ -9,12 +11,11 @@ import {
   type Role,
   type TextChannel,
 } from "discord.js";
-import { genColor } from "../../utils/colorGen";
-import { get, updateNews } from "../../utils/database/news";
-import { getSetting } from "../../utils/database/settings";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { sendChannelNews } from "../../utils/sendChannelNews";
-import { mention } from "../../utils/mention";
+import { errorEmbed } from "embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
+import { mention } from "utils/mention";
+import { pfpCheck } from "utils/pfpCheck";
+import { sendChannelNews } from "utils/sendChannelNews";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("edit")
@@ -26,15 +27,15 @@ export const data = new SlashCommandSubcommandBuilder()
 export async function run(interaction: ChatInputCommandInteraction) {
   const guild = interaction.guild!;
   if (!guild.members.cache.get(interaction.user.id)?.permissions.has("ManageGuild"))
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "You can't execute this command.",
-      "You need the **Manage Server** permission.",
-    );
+      title: "You can't execute this command.",
+      reason: "You need the **Manage Server** permission.",
+    });
 
   const id = interaction.options.getString("id")!;
   const news = get(guild.id, id);
-  if (!news) return await errorEmbed(interaction, "The specified news don't exist.");
+  if (!news) return await errorEmbed({ interaction, title: "The specified news don't exist." });
 
   const firstActionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
     new TextInputBuilder()
@@ -61,34 +62,38 @@ export async function run(interaction: ChatInputCommandInteraction) {
     .setTitle(`Edit news: ${news.title}`)
     .addComponents(firstActionRow, secondActionRow);
 
-  await interaction.showModal(editModal).catch(err => console.error(err));
+  await interaction
+    .showModal(editModal)
+    .catch(async error => await errorEmbed({ interaction, error, forward: true }));
+
   interaction.client.once("interactionCreate", async i => {
     if (!i.isModalSubmit()) return;
 
-    const role = getSetting(guild.id, "news", "role_id") as string;
+    const role = (await getSetting(guild.id, "news", "role_id")) as string;
     let roleToSend: Role | undefined;
     if (role) roleToSend = guild.roles.cache.get(role);
     const title = i.fields.getTextInputValue("title");
     const body = i.fields.getTextInputValue("body");
+    const avatar = news.authorPFP;
 
-    if (!getSetting(guild.id, "news", "edit_original_message"))
+    if (!(await getSetting(guild.id, "news", "edit_original_message")))
       await sendChannelNews(guild, id, interaction, title, body);
 
     const embed = new EmbedBuilder()
-      .setAuthor({ name: `•  ${news.author}`, iconURL: news.authorPFP })
+      .setAuthor({ name: `${pfpCheck(avatar)}${news.author}`, iconURL: avatar })
       .setTitle(title)
       .setDescription(body)
       .setTimestamp(parseInt(news.updatedAt.toString()) ?? null)
       .setFooter({ text: `Edited news from ${guild.name}\nID: ${news.id}` })
       .setColor(genColor(200));
 
-    (
-      guild.channels.cache.get(
-        (getSetting(guild.id, "news", "channel_id") as string) ?? interaction.channel?.id,
-      ) as TextChannel
-    )?.messages.edit(news.messageID, {
+    const channel = guild.channels.cache.get(
+      ((await getSetting(guild.id, "news", "channel_id")) as string) ?? interaction.channel?.id,
+    ) as TextChannel;
+
+    await channel.messages.edit(news.messageID, {
       embeds: [embed],
-      content: roleToSend ? mention(roleToSend.id, "ROLE") : undefined,
+      content: roleToSend ? await mention(roleToSend.id, "ROLE") : undefined,
     });
 
     updateNews(guild.id, id, title, body);

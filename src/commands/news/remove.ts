@@ -1,13 +1,13 @@
+import { deleteNews, get } from "database/news";
+import { getSetting } from "database/settings";
 import {
   EmbedBuilder,
   SlashCommandSubcommandBuilder,
   TextChannel,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { genColor } from "../../utils/colorGen";
-import { deleteNews, get } from "../../utils/database/news";
-import { getSetting } from "../../utils/database/settings";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
+import { errorEmbed } from "embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("remove")
@@ -22,18 +22,20 @@ export const data = new SlashCommandSubcommandBuilder()
 export async function run(interaction: ChatInputCommandInteraction) {
   const guild = interaction.guild!;
   if (!guild.members.cache.get(interaction.user.id)?.permissions.has("ManageGuild"))
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "You can't execute this command.",
-      "You need the **Manage Server** permission.",
-    );
+      title: "You can't execute this command.",
+      reason: "You need the **Manage Server** permission.",
+    });
 
   const id = interaction.options.getString("id")!;
   const news = get(guild.id, id);
-  if (!news) return await errorEmbed(interaction, "The specified news don't exist.");
+  if (!news) return await errorEmbed({ interaction, title: "The specified news don't exist." });
 
   const newsChannel = (await guild.channels
-    .fetch((getSetting(guild.id, "news", "channel_id") as string) ?? interaction.channel?.id)
+    .fetch(
+      ((await getSetting(guild.id, "news", "channel_id")) as string) ?? interaction.channel?.id,
+    )
     .catch(() => null)) as TextChannel;
 
   if (newsChannel) await newsChannel.messages.delete(news.messageID);

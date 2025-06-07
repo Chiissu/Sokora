@@ -1,3 +1,4 @@
+import { getSetting } from "database/settings";
 import {
   ChannelType,
   type Channel,
@@ -6,7 +7,6 @@ import {
   type MessagePayload,
   type TextChannel,
 } from "discord.js";
-import { getSetting } from "./database/settings";
 
 /**
  * Sends a message in the log channel. (if there is one set)
@@ -18,7 +18,7 @@ export async function logChannel(
   guild: Guild,
   options: string | MessagePayload | MessageCreateOptions,
 ) {
-  const logChannel = getSetting(guild.id, "moderation", "channel");
+  const logChannel = await getSetting(guild.id, "moderation", "channel");
   if (!logChannel) return;
 
   const channel = await guild.channels.cache

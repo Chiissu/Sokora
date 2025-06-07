@@ -1,7 +1,7 @@
 import { SlashCommandSubcommandBuilder, type ChatInputCommandInteraction } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
+import { errorCheck, modEmbed } from "embeds/modEmbed";
 import ms from "ms";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { errorCheck, modEmbed } from "../../utils/embeds/modEmbed";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("mute")
@@ -25,31 +25,32 @@ export async function run(interaction: ChatInputCommandInteraction) {
     await errorCheck(
       "ModerateMembers",
       { interaction, user, action: "Mute" },
-      { allErrors: true, botError: true, ownerError: true },
+      { allErrors: true, botError: true, ownerError: true, outsideError: true },
       "Moderate Members",
     )
   )
     return;
 
   if (!ms(duration) || ms(duration) > ms("28d") || ms(duration) <= 0)
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      `You can't mute ${user.displayName}.`,
-      "The duration is invalid or is above the 28 day limit.",
-    );
+      title: `You can't mute ${user.username}.`,
+      reason: "The duration is invalid or is above the 28 day limit.",
+    });
 
   const time = new Date(
     Date.parse(new Date().toISOString()) + Date.parse(new Date(ms(duration)).toISOString()),
   ).toISOString();
 
-  await modEmbed(
-    { interaction, user, action: "Muted", duration, dm: true, dbAction: "MUTE" },
-    reason,
-    true,
-  );
-
-  await interaction.guild?.members.cache
-    .get(user.id)
-    ?.edit({ communicationDisabledUntil: time, reason: reason ?? undefined })
-    .catch(error => console.error(error));
+  await Promise.all([
+    modEmbed(
+      { interaction, user, action: "Muted", duration, dm: true, dbAction: "MUTE" },
+      reason,
+      true,
+    ),
+    interaction.guild?.members.cache
+      .get(user.id)
+      ?.edit({ communicationDisabledUntil: time, reason: reason ?? undefined })
+      .catch(async error => await errorEmbed({ interaction, error, forward: true })),
+  ]);
 }

@@ -7,9 +7,10 @@ import {
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { errorEmbed } from "../../utils/embeds/errorEmbed.ts";
-import { genColor } from "../../utils/colorGen.ts";
-import { randomize } from "../../utils/randomize.ts";
+import { errorEmbed } from "embeds/errorEmbed.ts";
+import { genColor } from "utils/colorGen.ts";
+import { pfpCheck } from "utils/pfpCheck.ts";
+import { randomize } from "utils/randomize.ts";
 
 type RPSChoice = "rock" | "paper" | "scissors";
 const rpsChoices: RPSChoice[] = ["rock", "paper", "scissors"];
@@ -21,10 +22,8 @@ const rpsEmojis: Record<RPSChoice, string> = {
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("rps")
-  .setDescription("Play Rock Paper Scissors")
-  .addUserOption(option =>
-    option.setName("opponent").setDescription("The user to play against (optional)."),
-  );
+  .setDescription("Play rock paper scissors.")
+  .addUserOption(option => option.setName("opponent").setDescription("The user to play against."));
 
 function getWinner(choice1: RPSChoice, choice2: RPSChoice): 0 | 1 | 2 {
   if (choice1 == choice2) return 0;
@@ -38,7 +37,10 @@ function getWinner(choice1: RPSChoice, choice2: RPSChoice): 0 | 1 | 2 {
 }
 
 export async function run(interaction: ChatInputCommandInteraction) {
-  const opponent = interaction.options.getUser("opponent");
+  let opponent = interaction.options.getUser("opponent");
+  if (!opponent) opponent = interaction.client.user;
+  const user = interaction.user;
+  const userAvatar = user.displayAvatarURL();
   const optionsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     ...rpsChoices.map((choice: RPSChoice) =>
       new ButtonBuilder()
@@ -47,112 +49,77 @@ export async function run(interaction: ChatInputCommandInteraction) {
         .setStyle(ButtonStyle.Primary),
     ),
   );
+
   const baseEmbed = new EmbedBuilder()
-    .setTitle("Rock Paper Scissors")
+    .setAuthor({ name: `${pfpCheck(userAvatar)}An invitation to play!`, iconURL: userAvatar })
     .setDescription(
-      opponent
-        ? `${interaction.user} has challenged ${opponent} to a game!\n` +
-            `Both players, make your choice!`
-        : `Choose your weapon!`,
+      opponent.bot
+        ? `Choose your weapon!`
+        : `${user.username} has challenged ${opponent.username} to a game!\nBoth players, make your choice!`,
     )
-    .setColor(genColor(110));
+    .setColor(genColor(60));
 
-  if (opponent) {
-    if (opponent.bot)
-      return await errorEmbed(
-        interaction,
-        "Invalid opponent",
-        `You cannot play against a bot!${
-          opponent.id == interaction.client.user.id
-            ? " To challenge Sokora itself, run `/games rps` without specifying the opponent."
-            : ""
-        }`,
-      );
-
-    if (opponent.id == interaction.user.id)
-      return await errorEmbed(interaction, "Invalid opponent", "You cannot play against yourself!");
-
-    const reply = await interaction.reply({ embeds: [baseEmbed], components: [optionsRow] });
-
-    const playerChoices = new Map<string, RPSChoice>();
-    const collector = reply.createMessageComponentCollector({
-      filter: i => [interaction.user.id, opponent.id].includes(i.user.id),
-      time: 30000,
+  if (opponent.id == user.id)
+    return await errorEmbed({
+      interaction,
+      title: "Invalid opponent.",
+      reason: "You cannot play against yourself.",
     });
 
-    collector.on("collect", async (i: ButtonInteraction) => {
-      playerChoices.set(i.user.id, i.customId.split("_")[1] as RPSChoice);
-      await i.reply({ content: "Choice recorded!", flags: "Ephemeral" });
-      if (playerChoices.size == 2) collector.stop("game-complete");
-    });
-
-    collector.on("end", async (_, reason) => {
-      if (reason == "time")
-        return await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Game Timed Out")
-              .setDescription("The game has been cancelled due to inactivity.")
-              .setColor(genColor(0)),
-          ],
-          components: [],
-        });
-
-      if (reason == "game-complete") {
-        const p1Choice = playerChoices.get(interaction.user.id)!;
-        const p2Choice = playerChoices.get(opponent.id)!;
-        const winner = getWinner(p1Choice, p2Choice);
-
-        const resultEmbed = new EmbedBuilder()
-          .setTitle("Game Results")
-          .setDescription(
-            `${interaction.user}: ${rpsEmojis[p1Choice]}\n` +
-              `${opponent}: ${rpsEmojis[p2Choice]}\n\n` +
-              `Winner: ${winner == 0 ? "It's a tie!" : winner == 1 ? interaction.user : opponent}`,
-          )
-          .setColor(winner == 0 ? genColor(60) : genColor(120));
-
-        await interaction.editReply({ embeds: [resultEmbed], components: [] });
-      }
-    });
-    return;
-  }
-
+  // todo: prevent unknown error when deleting
   const reply = await interaction.reply({ embeds: [baseEmbed], components: [optionsRow] });
-
-  const collector = reply.createMessageComponentCollector({
-    filter: i => i.user.id == interaction.user.id,
-    time: 30000,
-  });
+  const playerChoices = new Map<string, RPSChoice>();
+  const collector = reply.createMessageComponentCollector({ time: 60000 });
 
   collector.on("collect", async (i: ButtonInteraction) => {
-    const playerChoice = i.customId.split("_")[1] as RPSChoice;
-    const botChoice = randomize(rpsChoices);
-    const winner = getWinner(playerChoice, botChoice);
+    if (!reply) return;
+    if (i.message.id != (await reply.fetch()).id)
+      return await errorEmbed({
+        interaction: i,
+        title:
+          "For some reason, this click would've caused the bot to error. Thankfully, this message right here prevents that.",
+      });
 
-    const resultEmbed = new EmbedBuilder()
-      .setTitle("Game Results")
-      .setDescription(
-        `You: ${rpsEmojis[playerChoice]}\n` +
-          `Bot: ${rpsEmojis[botChoice]}\n\n` +
-          `Result: ${winner == 0 ? "It's a tie!" : winner == 1 ? "You win!" : "Bot wins!"}`,
-      )
-      .setColor(winner == 0 ? genColor(60) : winner == 1 ? genColor(120) : genColor(0));
+    if (i.user.id != opponent.id && i.user.id != user.id)
+      return await errorEmbed({ interaction: i, title: "You aren't participating.." });
 
-    await i.update({ embeds: [resultEmbed], components: [] });
-    collector.stop();
+    playerChoices.set(i.user.id, i.customId.split("_")[1] as RPSChoice);
+    if (!opponent.bot) {
+      await i.reply({
+        embeds: [new EmbedBuilder().setTitle("Choice recorded!").setColor(genColor(120))],
+        flags: "Ephemeral",
+      });
+      if (playerChoices.size == 2) collector.stop("game-complete");
+    } else collector.stop("game-complete");
   });
 
   collector.on("end", async (_, reason) => {
-    if (reason != "time") return;
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle("Game timed out")
-          .setDescription("The game was cancelled due to inactivity.")
-          .setColor(genColor(0)),
-      ],
-      components: [],
-    });
+    if (reason == "time")
+      return await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setAuthor({ name: "Game timed out" })
+            .setDescription("The game has been canceled due to inactivity.")
+            .setColor(genColor(0)),
+        ],
+        components: [],
+      });
+
+    const p1Choice = playerChoices.get(user.id)!;
+    const p2Choice = opponent.bot ? randomize(rpsChoices) : playerChoices.get(opponent.id)!;
+    const winner = getWinner(p1Choice, p2Choice);
+    const avatar = winner == 1 ? userAvatar : opponent.displayAvatarURL();
+    const resultEmbed = new EmbedBuilder()
+      .setAuthor({ name: `${pfpCheck(avatar)}Game results`, iconURL: avatar })
+      .setDescription(
+        [
+          `**${user.username}**: ${rpsEmojis[p1Choice]}`,
+          `**${opponent.username}**: ${rpsEmojis[p2Choice]}\n`,
+          `${winner == 0 ? "**It's a tie!**" : winner == 1 ? `The winner is **${user.username}**!` : `The winner is **${opponent.username}**!`}`,
+        ].join("\n"),
+      )
+      .setColor(winner == 0 ? genColor(60) : genColor(120));
+
+    await interaction.editReply({ embeds: [resultEmbed], components: [] });
   });
 }

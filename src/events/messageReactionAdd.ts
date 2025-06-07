@@ -1,102 +1,95 @@
-import {
-  EmbedBuilder,
-  type MessageReaction,
-  type PartialMessageReaction,
-  type PartialUser,
-  type User,
-} from "discord.js";
-import { genColor } from "../utils/colorGen";
-import { getSetting } from "../utils/database/settings";
-import { getStarred, setStarred } from "../utils/database/starboard";
-import { Event } from "../utils/types";
+import { getSetting } from "database/settings";
+import { getStarred, setStarred } from "database/starboard";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
+import { genColor } from "utils/colorGen";
+import { pfpCheck } from "utils/pfpCheck";
+import { Event } from "utils/types";
 
-export default (async function run(
-  reaction: MessageReaction | PartialMessageReaction,
-  user: User | PartialUser,
-) {
-  console.log("🌟 Reaction Add Event Triggered");
-  console.log(`Reaction emoji: ${reaction.emoji.name}`);
-  console.log(`User: ${user.tag}`);
-
+export default (async function run(reaction, user) {
   if (reaction.partial)
-    await reaction.fetch().catch(error => console.error(`Error fetching reaction: ${error}`));
+    await reaction.fetch().catch(
+      async error =>
+        await errorEmbed({
+          client,
+          error,
+          title: `Error fetching reaction.`,
+          log: true,
+          forward: true,
+        }),
+    );
 
+  if (user.partial)
+    await user.fetch().catch(
+      async error =>
+        await errorEmbed({
+          client,
+          error,
+          title: `Error fetching user.`,
+          log: true,
+          forward: true,
+        }),
+    );
+
+  const client = user.client;
   const message = await reaction.message.fetch();
-  if (!message.guild) return console.log("No guild found, returning");
+  if (!message.guild) return;
 
-  const starEmoji = (getSetting(message.guild.id, "starboard", "emoji") as string) || "⭐";
-  if (reaction.emoji.name != starEmoji)
-    return console.log("Emoji does not match configured star emoji, returning");
+  const starEmoji = ((await getSetting(message.guild.id, "starboard", "emoji")) as string) || "⭐";
+  if (reaction.emoji.name != starEmoji) return;
+  if (!(await getSetting(message.guild.id, "starboard", "enabled")) as boolean) return;
+  if (!message.content && !message.attachments.size) return;
 
-  if (!getSetting(message.guild.id, "starboard", "enabled") as boolean)
-    return console.log("Starboard not enabled, returning");
+  const starboardChannelId = (await getSetting(message.guild.id, "starboard", "channel")) as string;
+  if (!starboardChannelId) return;
 
-  if (!message.content && !message.attachments.size)
-    return console.log("No content or attachments, returning");
-
-  const starboardChannelId = getSetting(message.guild.id, "starboard", "channel") as string;
-  console.log("Starboard channel ID:", starboardChannelId);
-
-  if (!starboardChannelId) return console.log("No starboard channel configured, returning");
   const starboardChannel = message.guild.channels.cache.get(starboardChannelId);
-  console.log("Found starboard channel:", starboardChannel?.name);
-
-  if (!starboardChannel?.isTextBased())
-    return console.log("Starboard channel not text-based or not found, returning");
+  if (!starboardChannel?.isTextBased()) return;
 
   const starCount = reaction.count || 0;
-  const threshold = parseInt(getSetting(message.guild.id, "starboard", "threshold") as string) || 3;
-  if (starCount < threshold) return console.log("Star count below threshold, returning");
+  const threshold =
+    parseInt((await getSetting(message.guild.id, "starboard", "threshold")) as string) || 3;
+  if (starCount < threshold) return;
 
   const existingStarred = getStarred(message.guild.id, message.id);
-  console.log("Existing starred message:", getStarred(message.guild.id, message.id) ? "yes" : "no");
-
+  const avatar = message.author.displayAvatarURL();
   const embed = new EmbedBuilder()
     .setAuthor({
-      name: message.author.tag,
-      iconURL: message.author.displayAvatarURL(),
+      name: `${pfpCheck(avatar)}${message.author.displayName}  •  ${starCount} ${starEmoji}`,
+      iconURL: avatar,
     })
-    .addFields([
-      {
-        name: "Message",
-        value: message.content || "",
-      },
-      {
-        name: "Source",
-        value: `[Jump to message](${message.url})`,
-      },
-    ])
+    .setDescription(message.content)
     .setTimestamp(message.createdAt)
-    .setFooter({ text: `ID: ${message.id}` })
+    .setFooter({ text: `Message ID: ${message.id}` })
     .setColor(genColor(80));
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel("•  Jump to message")
+      .setURL(message.url)
+      .setEmoji("🔗")
+      .setStyle(ButtonStyle.Link),
+  );
 
   const attachment = message.attachments.first();
   if (attachment?.contentType?.startsWith("image/")) embed.setImage(attachment.url);
-
-  const starText = `${starEmoji} ${starCount}`;
   try {
-    if (!existingStarred) {
-      console.log("Creating new starred message");
-      const starMessage = await starboardChannel.send({ content: starText, embeds: [embed] });
-
-      setStarred(
+    if (!existingStarred)
+      return setStarred(
         message.guild.id,
         message.id,
         message.channel.id,
         message.author.id,
-        starMessage.id,
+        (await starboardChannel.send({ embeds: [embed], components: [row] })).id,
         starCount,
         message.content || "",
         message.createdTimestamp.toString(),
       );
-      return console.log("Successfully created new starred message");
-    }
 
-    console.log("Updating existing starred message");
     const [channelId, , starMessageId, , ,] = existingStarred;
-    const starboardMessage = await starboardChannel.messages.fetch(starMessageId);
-    await starboardMessage.edit({ content: starText, embeds: [embed] });
-
+    await (
+      await starboardChannel.messages.fetch(starMessageId)
+    ).edit({ embeds: [embed], components: [row] });
     setStarred(
       message.guild.id,
       message.id,
@@ -107,8 +100,13 @@ export default (async function run(
       message.content || "",
       message.createdTimestamp.toString(),
     );
-    console.log("Successfully updated starred message");
   } catch (error) {
-    console.error("Error handling starboard message:", error);
+    await errorEmbed({
+      client,
+      error,
+      title: "Error handling starboard message.",
+      log: true,
+      forward: true,
+    });
   }
 } as Event<"messageReactionAdd">);

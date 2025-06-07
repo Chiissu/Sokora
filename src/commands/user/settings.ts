@@ -1,24 +1,25 @@
-import { getSetting, setSetting, settingsDefinition, settingsKeys } from "database/settings";
+import {
+  getUserSetting,
+  setUserSetting,
+  settingsDefinition,
+  settingsKeys,
+} from "database/userSettings";
 import {
   AutocompleteInteraction,
   EmbedBuilder,
   InteractionType,
-  PermissionsBitField,
-  SlashCommandBuilder,
   SlashCommandSubcommandBuilder,
+  SlashCommandSubcommandGroupBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { errorEmbed } from "embeds/errorEmbed";
 import { capitalize } from "utils/capitalize";
 import { genColor } from "utils/colorGen";
 import { humanizeSettings } from "utils/humanizeSettings";
-import { mention } from "utils/mention";
 import { pfpCheck } from "utils/pfpCheck";
 
-export const data = new SlashCommandBuilder()
+export const data = new SlashCommandSubcommandGroupBuilder()
   .setName("settings")
-  .setDescription("Configure Sokora to your liking.")
-  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator);
+  .setDescription("Configure Sokora to your liking.");
 
 settingsKeys.forEach(key => {
   const subcommand = new SlashCommandSubcommandBuilder()
@@ -38,21 +39,6 @@ settingsKeys.forEach(key => {
           option.setName(sub).setDescription(setting.desc).setRequired(false),
         );
         break;
-      case "CHANNEL":
-        subcommand.addChannelOption(option =>
-          option.setName(sub).setDescription(setting.desc).setRequired(false),
-        );
-        break;
-      case "USER":
-        subcommand.addUserOption(option =>
-          option.setName(sub).setDescription(setting.desc).setRequired(false),
-        );
-        break;
-      case "ROLE":
-        subcommand.addRoleOption(option =>
-          option.setName(sub).setDescription(setting.desc).setRequired(false),
-        );
-        break;
       default:
         subcommand.addStringOption(option =>
           option.setName(sub).setDescription(setting.desc).setRequired(false),
@@ -64,39 +50,18 @@ settingsKeys.forEach(key => {
 });
 
 export async function run(interaction: ChatInputCommandInteraction) {
-  const guild = interaction.guild!;
-  if (!guild.members.cache?.get(interaction.user.id)?.permissions.has("Administrator"))
-    return await errorEmbed({
-      interaction,
-      title: "You can't execute this command.",
-      reason: "You need the **Administrator** permission.",
-    });
-
+  const user = interaction.user;
+  const userID = user.id;
+  const avatar = user.displayAvatarURL();
   const key = interaction.options.getSubcommand();
-  const values = interaction.options.data[0].options!;
+  const values = interaction.options.data[0].options![0].options!;
   const settingsDef = settingsDefinition[key];
   const settingText = async (name: string): Promise<string> => {
-    const setting = (await getSetting(guild.id, key, name))?.toString();
+    const setting = (await getUserSetting(userID, key, name))?.toString();
     if (!setting) return "*Undefined*";
-    let text;
-    switch (settingsDef.settings[name].type) {
-      case "CHANNEL":
-        text = setting ? await mention(setting, "CHANNEL") : "*Not set*";
-        break;
-      case "USER":
-        text = setting ? await mention(setting, "USER") : "*Not set*";
-        break;
-      case "ROLE":
-        text = setting ? await mention(setting, "ROLE") : "*Not set*";
-        break;
-      default:
-        text = setting || "*Not set*";
-        break;
-    }
-    return text;
+    return setting || "*Not set*";
   };
 
-  const avatar = interaction.guild!.iconURL()!;
   if (!values.length || !values.filter(value => value.type != 1)[0]) {
     const embed = new EmbedBuilder()
       .setAuthor({ name: `${pfpCheck(avatar)}${capitalize(key)} settings`, iconURL: avatar })
@@ -122,24 +87,10 @@ export async function run(interaction: ChatInputCommandInteraction) {
   let description = "";
   for (let i = 0; i < values.length; i++) {
     const option = values[i];
-
-    if (
-      option.type == 7 &&
-      !guild.channels.cache
-        .get(option.value as string)
-        ?.permissionsFor(interaction.client.user)
-        ?.has("ViewChannel")
-    )
-      return await errorEmbed({
-        interaction,
-        title: "The bot can't view this channel.",
-        reason:
-          "You can either give the **View Channel** permission for the bot or use a channel from the dropdown menu.",
-      });
-
-    await setSetting(guild.id, key, option.name, option.value as string);
-    description += `**${humanizeSettings(capitalize(option.name))}:** ${humanizeSettings(
-      await settingText(option.name.toString()),
+    const name = option.name;
+    await setUserSetting(userID, key, name, option.value as string);
+    description += `**${humanizeSettings(capitalize(option.name))}**: ${humanizeSettings(
+      await settingText(name),
     )}\n`;
   }
 

@@ -1,7 +1,8 @@
 import { EmbedBuilder, Invite, type Guild } from "discord.js";
 import { genColor, genImageColor } from "../colorGen";
-import { pluralOrNot } from "../pluralOrNot";
 import { mention } from "../mention";
+import { pfpCheck } from "../pfpCheck";
+import { pluralOrNot } from "../pluralOrNot";
 
 type Options = {
   guild: Guild;
@@ -56,32 +57,33 @@ export async function serverEmbed(options: Options) {
     safetyValues.push(`**${NSFW == 1 ? "Explicit" : NSFW == 2 ? "Safe" : "Age restricted"}**`);
 
   const statValues: (string | null)[] = [
-    `👥 • **${guild.memberCount?.toLocaleString("en-US")}** members`,
-    `🗨️ • **${channelCount}** ${pluralOrNot("channel", channelCount)}: **${channelSizes.text}** text • **${channelSizes.voice}** voice`,
+    `**${guild.memberCount?.toLocaleString("en-US")}** members`,
+    `**${channelCount}** ${pluralOrNot("channel", channelCount)} • **${channelSizes.text}** text and **${channelSizes.voice}** voice`,
   ];
 
   if (boostTier)
     statValues.push(
-      `🌟 • ${!boostTier ? "**No** level" : `Level **${boostTier}**`}: **${boostCount}**${
+      `${!boostTier ? "**No** level" : `Level **${boostTier}**`} • **${boostCount}**${
         !boostTier ? "/2" : boostTier == 1 ? "/7" : boostTier == 2 ? "/14" : ""
       } ${pluralOrNot("boost", boostCount!)} • **${boosters.size}** ${pluralOrNot("booster", boosters.size)}`,
     );
 
   if (options.roles)
     statValues.push(
-      `🎭 • **${roles.size - 1}** ${pluralOrNot("role", roles.size - 1)}: ${
+      `**${roles.size - 1}** ${pluralOrNot("role", roles.size - 1)} • ${
         roles.size == 1
           ? "*None*"
-          : `${sortedRoles
-              .slice(0, 5)
-              .map(role => mention(role[0], "ROLE"))
-              .join(" • ")}${rolesLength > 5 ? ` and **${rolesLength - 5}** more` : ""}`
+          : `${(
+              await Promise.all(
+                sortedRoles.slice(0, 5).map(async role => await mention(role[0], "ROLE")),
+              )
+            ).join("  •  ")}${rolesLength > 5 ? ` and **${rolesLength - 5}** more` : ""}`
       }`,
     );
 
   const embed = new EmbedBuilder()
     .setAuthor({
-      name: `${pages ? `#${page}  •  ` : icon ? "•  " : ""}${guild.name}`,
+      name: `${pages ? `#${page}  •  ` : pfpCheck(icon)}${guild.name}`,
       iconURL: icon,
     })
     .setDescription(guild.description ? `> ${guild.description}` : null)
@@ -89,10 +91,12 @@ export async function serverEmbed(options: Options) {
       {
         name: "📃 • General",
         value: generalValues.join("\n"),
+        inline: true,
       },
       {
         name: "🛡 • Safety setup",
-        value: safetyValues.join(" • "),
+        value: safetyValues.join("\n"),
+        inline: true,
       },
       {
         name: "📈 • Stats",
@@ -100,7 +104,6 @@ export async function serverEmbed(options: Options) {
       },
     )
     .setFooter({ text: `${pages ? `Page ${page}/${pages} • ` : ""}Server ID: ${guild.id}` })
-    .setThumbnail(icon)
     .setColor((await genImageColor(icon)) ?? genColor(200));
 
   if (options.invite?.show) {
@@ -129,7 +132,7 @@ export async function serverEmbed(options: Options) {
       : await inviteChannel.createInvite({
           maxAge: undefined,
           maxUses: undefined,
-          reason: "ServerBoard invite",
+          reason: "Serverboard invite",
           temporary: false,
           unique: true,
         });
@@ -137,7 +140,6 @@ export async function serverEmbed(options: Options) {
     embed.addFields({
       name: `🚪 • Join in!`,
       value: `This server allows you to join from here! ${inviteUrl}`,
-      inline: true,
     });
   }
 

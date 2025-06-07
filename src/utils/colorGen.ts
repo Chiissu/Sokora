@@ -10,7 +10,7 @@ import { kominator } from "./kominator";
  */
 export function genColor(hue: number): ColorResolvable {
   return Bun.color(
-    `hsl(${hue + 15 * Math.random()}, 100%, ${50 + 25 * Math.random()}%)`,
+    `hsl(${hue + 15 * Math.random()}, ${80 + 20 * Math.random()}%, ${60 + 15 * Math.random()}%)`,
     "hex",
   ) as ColorResolvable;
 }

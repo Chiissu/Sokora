@@ -1,32 +1,37 @@
-import { AttachmentBuilder, EmbedBuilder } from "discord.js";
-import { genColor } from "../utils/colorGen";
-import { getSetting } from "../utils/database/settings";
-import { logChannel } from "../utils/logChannel";
-import type { Event } from "../utils/types";
+import { getSetting } from "database/settings";
+import {
+  ActionRowBuilder,
+  AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+} from "discord.js";
+import { genColor } from "utils/colorGen";
+import { logChannel } from "utils/logChannel";
+import { pfpCheck } from "utils/pfpCheck";
+import type { Event } from "utils/types";
 
+// todo: make links work
 const MESSAGE_LENGTH_CAP = 1024;
-
 export default (async function run(oldMessage, newMessage) {
+  if (oldMessage.partial) return;
   const author = oldMessage.author!;
   if (author.bot) return;
 
   const guild = oldMessage.guild!;
-  if (!getSetting(guild.id, "moderation", "log_messages")) return;
+  if (!(await getSetting(guild.id, "moderation", "log_messages"))) return;
 
   const oldContent = oldMessage.content!;
   const newContent = newMessage.content!;
   if (oldContent == newContent) return;
   const oldLength = oldContent.length;
   const newLength = newContent.length;
-
+  const avatar = author.displayAvatarURL();
   const embed = new EmbedBuilder()
     .setAuthor({
-      name: `•  ${author.displayName} edited a message.`,
-      iconURL: author.displayAvatarURL(),
+      name: `${pfpCheck(avatar)}${author.username} edited a message`,
+      iconURL: avatar,
     })
-    .setDescription(
-      `[Jump to message](${oldMessage.url}) • [See ${author.displayName}'s profile](https://discord.com/users/${author.id})`,
-    )
     .setTimestamp(new Date())
     .addFields(
       {
@@ -47,11 +52,19 @@ export default (async function run(oldMessage, newMessage) {
     .setFooter({ text: `User ID: ${author.id}` })
     .setColor(genColor(60));
 
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setLabel("• Jump to message")
+      .setURL(oldMessage.url)
+      .setEmoji("🔗")
+      .setStyle(ButtonStyle.Link),
+  );
+
   const files: AttachmentBuilder[] = [];
   if (oldLength >= MESSAGE_LENGTH_CAP)
     files.push(new AttachmentBuilder(Buffer.from(oldContent, "utf8"), { name: "oldContent.txt" }));
   if (newLength >= MESSAGE_LENGTH_CAP)
     files.push(new AttachmentBuilder(Buffer.from(newContent, "utf8"), { name: "newContent.txt" }));
 
-  await logChannel(guild, { embeds: [embed], files: files });
+  await logChannel(guild, { embeds: [embed], files: files, components: [row] });
 } as Event<"messageUpdate">);

@@ -1,8 +1,8 @@
 import { SlashCommandSubcommandBuilder, type ChatInputCommandInteraction } from "discord.js";
+import { errorEmbed } from "embeds/errorEmbed";
+import { errorCheck, modEmbed } from "embeds/modEmbed";
 import ms from "ms";
-import { errorEmbed, logError } from "../../utils/embeds/errorEmbed";
-import { errorCheck, modEmbed } from "../../utils/embeds/modEmbed";
-import { scheduleUnban } from "../../utils/unbanScheduler";
+import { scheduleUnban } from "utils/unbanScheduler";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("ban")
@@ -31,33 +31,36 @@ export async function run(interaction: ChatInputCommandInteraction) {
     return;
 
   if ((await guild.bans.fetch()).get(user.id))
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      `You can't ban ${user.displayName}.`,
-      "This user is already banned.",
-    );
+      title: `You can't ban ${user.username}.`,
+      reason: "This user is already banned.",
+    });
 
   let expiresAt: number | undefined;
   if (duration) {
     const durationMs = ms(duration);
     if (!durationMs || durationMs <= 0)
-      return await errorEmbed(
+      return await errorEmbed({
         interaction,
-        `You can't ban ${user.displayName} temporarily.`,
-        "The duration is invalid.",
-      );
+        title: `You can't ban ${user.username} temporarily.`,
+        reason: "The duration is invalid.",
+      });
 
     expiresAt = Date.now() + durationMs;
     scheduleUnban(interaction.client, guild.id, user.id, interaction.member!.user.id, durationMs);
   }
 
   try {
-    await modEmbed(
-      { interaction, user, action: "Banned", duration, dm: true, dbAction: "BAN", expiresAt },
-      reason,
-    );
-    await guild.members.ban(user.id, { reason: reason ?? undefined });
+    // todo: do this in most of the places that have lots of await functions and where order of things done doesn't matter
+    await Promise.all([
+      modEmbed(
+        { interaction, user, action: "Banned", duration, dm: true, dbAction: "BAN", expiresAt },
+        reason,
+      ),
+      guild.members.ban(user.id, { reason: reason ?? undefined }),
+    ]);
   } catch (error) {
-    return await logError({ error, interaction });
+    return await errorEmbed({ interaction, error, forward: true });
   }
 }

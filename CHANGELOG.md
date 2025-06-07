@@ -18,7 +18,6 @@
 
 #### Moderation
 
-- Added autokick and regex-based automod.
 - Added the ability to `/moderation clear` messages for a single user.
 - Added reason field to `/moderation unmute`.
 

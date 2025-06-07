@@ -1,12 +1,12 @@
+import { listUserModeration, removeModeration } from "database/moderation";
 import {
   DMChannel,
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { listUserModeration, removeModeration } from "../../utils/database/moderation";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { errorCheck } from "../../utils/embeds/modEmbed";
-import { modActionEmbed } from "../../utils/embeds/modActionEmbed";
+import { errorEmbed } from "embeds/errorEmbed";
+import { modActionEmbed } from "embeds/modActionEmbed";
+import { errorCheck } from "embeds/modEmbed";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("delwarn")
@@ -24,7 +24,7 @@ export const data = new SlashCommandSubcommandBuilder()
 export async function run(interaction: ChatInputCommandInteraction) {
   const user = interaction.options.getUser("user")!;
   const guild = interaction.guild!;
-  const name = user.displayName;
+  const name = user.username;
   const id = interaction.options.getNumber("id");
   const warns = listUserModeration(guild.id, user.id, "WARN");
   const newWarns = warns.filter(warn => warn.id != `${id}`);
@@ -39,19 +39,23 @@ export async function run(interaction: ChatInputCommandInteraction) {
     return;
 
   if (newWarns.length == warns.length)
-    return await errorEmbed(interaction, `There is no warning with the id of ${id}.`);
+    return await errorEmbed({ interaction, title: `There is no warning with the id of ${id}.` });
 
   try {
     removeModeration(guild.id, `${id}`);
   } catch (error) {
-    console.error(error);
+    return await errorEmbed({
+      interaction,
+      error,
+      forward: true,
+    });
   }
 
   const embed = await modActionEmbed(
     {
       title: `•  Removed a warning from ${name}`,
       iconURL: user.displayAvatarURL(),
-      body: `**Moderator**: ${interaction.user.displayName}`,
+      body: `**Moderator**: ${interaction.user.username}`,
       footer: `User ID: ${user.id}`,
     },
     guild,
@@ -63,7 +67,11 @@ export async function run(interaction: ChatInputCommandInteraction) {
   if (user.bot) return;
   try {
     await dmChannel.send({ embeds: [embed.setTitle("Your warning has been removed.")] });
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    return await errorEmbed({
+      interaction,
+      error,
+      forward: true,
+    });
   }
 }

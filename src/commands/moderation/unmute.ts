@@ -1,6 +1,6 @@
 import { SlashCommandSubcommandBuilder, type ChatInputCommandInteraction } from "discord.js";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { errorCheck, modEmbed } from "../../utils/embeds/modEmbed";
+import { errorEmbed } from "embeds/errorEmbed";
+import { errorCheck, modEmbed } from "embeds/modEmbed";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("unmute")
@@ -21,19 +21,23 @@ export async function run(interaction: ChatInputCommandInteraction) {
     await errorCheck(
       "ModerateMembers",
       { interaction, user, action: "Unmute" },
-      { allErrors: false, botError: true },
+      { allErrors: false, botError: true, outsideError: true },
       "Moderate Members",
     )
   )
     return;
 
   if (!target?.communicationDisabledUntil)
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "You can't unmute this user.",
-      "The user was never muted.",
-    );
+      title: "You can't unmute this user.",
+      reason: "The user was never muted.",
+    });
 
-  await modEmbed({ interaction, user, action: "Unmuted", dm: true, dbAction: "UNMUTE" }, reason);
-  await target?.edit({ communicationDisabledUntil: null }).catch(error => console.error(error));
+  await Promise.all([
+    modEmbed({ interaction, user, action: "Unmuted", dm: true, dbAction: "UNMUTE" }, reason),
+    target
+      ?.edit({ communicationDisabledUntil: null })
+      .catch(async error => await errorEmbed({ interaction, error, forward: true })),
+  ]);
 }

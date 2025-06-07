@@ -6,10 +6,11 @@ import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { version } from "../../package.json";
-import { genColor, genImageColor } from "../utils/colorGen";
-import { pluralOrNot } from "../utils/pluralOrNot";
-import { replace } from "../utils/replace";
+import { version } from "package";
+import { genColor, genImageColor } from "utils/colorGen";
+import { pfpCheck } from "utils/pfpCheck";
+import { pluralOrNot } from "utils/pluralOrNot";
+import { replace } from "utils/replace";
 
 export const data = new SlashCommandBuilder()
   .setName("about")
@@ -29,7 +30,7 @@ export async function run(interaction: ChatInputCommandInteraction) {
   const uniqueUsers = Array.from(uniqueIDs).length;
 
   const embed = new EmbedBuilder()
-    .setAuthor({ name: "•  About Sokora", iconURL: avatar })
+    .setAuthor({ name: `${pfpCheck(avatar)}About Sokora`, iconURL: avatar })
     .setDescription(
       "Sokora is a multipurpose Discord bot that lets you manage your servers easily.",
     )
@@ -53,17 +54,16 @@ export async function run(interaction: ChatInputCommandInteraction) {
       },
     )
     .setFooter({ text: replace("(madeWith)") })
-    .setThumbnail(avatar)
     .setColor(user.hexAccentColor ?? (await genImageColor(undefined, avatar)) ?? genColor(270));
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setLabel("• Vote")
+      .setLabel("•  Vote")
       .setURL(`https://top.gg/bot/${user.id}/vote`)
       .setEmoji("🗳️")
       .setStyle(ButtonStyle.Link),
     new ButtonBuilder()
-      .setLabel("• Donate")
+      .setLabel("•  Donate")
       .setURL("https://paypal.me/SokoraTheBot")
       .setEmoji("⭐")
       .setStyle(ButtonStyle.Link),

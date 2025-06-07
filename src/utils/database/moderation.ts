@@ -15,7 +15,7 @@ const definition = {
   },
 } satisfies TableDefinition;
 
-export type modType = "MUTE" | "UNMUTE" | "WARN" | "KICK" | "BAN" | "NOTE";
+export type modType = "MUTE" | "UNMUTE" | "WARN" | "KICK" | "BAN" | "UNBAN";
 const database = getDatabase(definition);
 const addQuery = database.query(
   "INSERT INTO moderation (guild, user, type, moderator, reason, id, timestamp, expiresAt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
@@ -44,8 +44,8 @@ export function addModeration(
   reason = "",
   expiresAt?: number | null,
 ) {
-  let id: any = getLastIdQuery.all(guildID);
-  id = parseInt(id.length ? id[0].id : 0) + 1;
+  let id: unknown[] | number = getLastIdQuery.all(guildID);
+  id = parseInt(id.length ? (id[0] as { id: string }).id : "0") + 1;
   addQuery.run(guildID, userID, type, moderator, reason, id, Date.now(), expiresAt ?? null);
   return id;
 }

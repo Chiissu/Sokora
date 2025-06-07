@@ -3,11 +3,11 @@ import {
   SlashCommandSubcommandBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { errorEmbed } from "../../utils/embeds/errorEmbed";
-import { pluralOrNot } from "../../utils/pluralOrNot";
-import { modActionEmbed } from "../../utils/embeds/modActionEmbed";
-import { mention } from "../../utils/mention";
-import { errorCheck } from "../../utils/embeds/modEmbed";
+import { errorEmbed } from "embeds/errorEmbed";
+import { modActionEmbed } from "embeds/modActionEmbed";
+import { errorCheck } from "embeds/modEmbed";
+import { mention } from "utils/mention";
+import { pluralOrNot } from "utils/pluralOrNot";
 
 export const data = new SlashCommandSubcommandBuilder()
   .setName("clear")
@@ -27,10 +27,11 @@ export const data = new SlashCommandSubcommandBuilder()
         ChannelType.PublicThread,
         ChannelType.PrivateThread,
         ChannelType.GuildVoice,
+        ChannelType.GuildStageVoice,
       ),
   )
   .addUserOption(user =>
-    user.setName("user").setDescription("Only clear messages from this specific user"),
+    user.setName("user").setDescription("Only clear messages from this specific user."),
   );
 
 export async function run(interaction: ChatInputCommandInteraction) {
@@ -49,9 +50,13 @@ export async function run(interaction: ChatInputCommandInteraction) {
 
   const amount = interaction.options.getNumber("amount")!;
   if (amount > 100)
-    return await errorEmbed(interaction, "You can only clear up to 100 messages at a time.");
+    return await errorEmbed({
+      interaction,
+      title: "You can only clear up to 100 messages at a time.",
+    });
 
-  if (amount < 1) return await errorEmbed(interaction, "You must clear at least 1 message.");
+  if (amount < 1)
+    return await errorEmbed({ interaction, title: "You must clear at least 1 message." });
 
   const targetUser = interaction.options.getUser("user");
   let deletedAmount = 0;
@@ -60,10 +65,14 @@ export async function run(interaction: ChatInputCommandInteraction) {
       channel.type == ChannelType.GuildText ||
       channel.type == ChannelType.PublicThread ||
       channel.type == ChannelType.PrivateThread ||
-      channel.type == ChannelType.GuildVoice
+      channel.type == ChannelType.GuildVoice ||
+      channel.type == ChannelType.GuildStageVoice
     )
   )
-    return;
+    return await errorEmbed({
+      interaction,
+      title: "You have provided a channel that can't have messages to clear.",
+    });
 
   try {
     if (targetUser) {
@@ -72,34 +81,40 @@ export async function run(interaction: ChatInputCommandInteraction) {
         .first(amount);
 
       if (userMessages.length == 0)
-        return await errorEmbed(
+        return await errorEmbed({
           interaction,
-          "No messages found.",
-          "No messages from this user were found in the recent history.",
-        );
+          title: "No messages found.",
+          reason: "No messages from this user were found in the recent history.",
+        });
 
       await channel.bulkDelete(userMessages, true);
       deletedAmount = userMessages.length;
     } else {
-      await channel.bulkDelete(amount, true);
-      deletedAmount = amount;
+      await channel.bulkDelete(amount, true).then(async messages => {
+        deletedAmount = messages.size;
+      });
+      if (deletedAmount == 0)
+        return await errorEmbed({
+          interaction,
+          title: "No messages found.",
+          reason: "No messages were found in the recent history.",
+        });
     }
   } catch (error) {
-    console.error(error);
-    return await errorEmbed(
+    return await errorEmbed({
       interaction,
-      "Error.",
-      "An error occurred while trying to delete messages.",
-    );
+      error,
+      forward: true,
+    });
   }
 
   await modActionEmbed(
     {
       title: `Cleared ${deletedAmount} ${pluralOrNot("message", deletedAmount)}.`,
       body: [
-        `**Moderator**: ${interaction.user.displayName}`,
-        `**Channel**: ${channelOption ?? mention(channel.id, "CHANNEL")}`,
-        targetUser ? `**Target User**: ${targetUser.displayName}` : null,
+        `**Moderator**: ${interaction.user.username}`,
+        `**Channel**: ${channelOption ?? (await mention(channel.id, "CHANNEL"))}`,
+        targetUser ? `**Target user**: ${targetUser.username}` : null,
       ]
         .filter(Boolean)
         .join("\n"),

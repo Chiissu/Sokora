@@ -1,17 +1,20 @@
-import { ActivityType, Client } from "discord.js";
-import { registerGuildCommands } from "./handlers/commands";
-import { loadEasterEggs, loadEvents } from "./handlers/events";
-import { leavePlease } from "./utils/leavePlease";
-import { rescheduleUnbans } from "./utils/unbanScheduler";
+import { Chart, registerables } from "chart.js";
+import { ActivityType, Client, Partials } from "discord.js";
+import { registerGuildCommands } from "handlers/commands";
+import { loadAuditEvents, loadEasterEggs, loadEvents } from "handlers/events";
+import { leavePlease } from "utils/leavePlease";
+import { rescheduleUnbans } from "utils/unbanScheduler";
 
-const client = new Client({
+export const client = new Client({
   presence: {
     activities: [{ name: "your feedback!", type: ActivityType.Listening }],
   },
+  partials: [Partials.Message, Partials.Reaction, Partials.User],
   intents: [
     "Guilds",
     "GuildMembers",
     "GuildMessages",
+    "GuildModeration",
     "GuildEmojisAndStickers",
     "GuildBans",
     "GuildMessageReactions",
@@ -22,23 +25,23 @@ const client = new Client({
 client.once("ready", async () => {
   const guilds = client.guilds.cache;
   for (const id of guilds.keys())
-    await leavePlease(guilds.get(id)!, await guilds.get(id)?.fetchOwner()!, "Not like that.");
+    await leavePlease(guilds.get(id)!, await guilds.get(id)!.fetchOwner()!, "Not like that.");
 
-  await loadEvents(client);
-  await loadEasterEggs();
-  // uncomment if you want to remove guild/global commands or register guild/global commands
-  // await removeGuildCommands(client);
-  // await removeGlobalCommands(client);
-  await registerGuildCommands(client);
-  // await registerGlobalCommands(client);
+  await Promise.all([
+    loadEvents(client),
+    loadEasterEggs(),
+    loadAuditEvents(client),
+    registerGuildCommands(client),
+    rescheduleUnbans(client),
+  ]).then(() =>
+    console.log(Math.random() < 0.001 ? "こんにちは! (konichi whats upppppppp)" : "ちーっす！"),
+  );
 
-  if (Math.random() < 0.001) {
-    console.log("こんにちは! (konichi whats upppppppp)");
-  } else {
-    console.log("ちーっす！");
-  }
-
-  rescheduleUnbans(client);
+  // if you want to register/remove guild/global commands, replace registerGuildCommands() with:
+  // removeGuildCommands(client)
+  // removeGlobalCommands(client)
+  // registerGlobalCommands(client)
+  Chart.register(...registerables);
 });
 
-client.login(process.env.TOKEN);
+await client.login(process.env.TOKEN);
